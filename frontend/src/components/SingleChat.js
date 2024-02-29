@@ -11,7 +11,7 @@ import ProfileModal from "./miscellaneous/ProfileModal";
 import ScrollableChat from "./ScrollableChat";
 import Lottie from "react-lottie";
 
-
+import { Button } from "@chakra-ui/react";
 import io from "socket.io-client";
 import UpdateGroupChatModal from "./miscellaneous/UpdateGroupChatModal";
 import { ChatState } from "../Context/ChatProvider";
@@ -100,6 +100,15 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
           position: "bottom",
         });
       }
+    }
+  };
+
+
+  const deleteLatestMessage = () => {
+    if (messages.length > 0) {
+      const updatedMessages = [...messages];
+      updatedMessages.pop();
+      setMessages(updatedMessages);
     }
   };
 
@@ -247,6 +256,15 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
                 onChange={typingHandler}
                 
               />
+
+<Button
+  onClick={deleteLatestMessage}
+  bg="blue"
+  color="white"
+  _hover={{ bg: "red" }}
+>
+  Delete Message
+</Button>
             </FormControl>
           </Box>
         </>

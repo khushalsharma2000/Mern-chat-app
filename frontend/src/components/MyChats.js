@@ -115,6 +115,7 @@ const MyChats = ({ fetchAgain }) => {
                       : chat.latestMessage.content}
                   </Text>
                 )}
+                
               </Box>
             ))}
           </Stack>
