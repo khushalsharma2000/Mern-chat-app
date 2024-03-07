@@ -236,5 +236,5 @@ module.exports = {
   addToGroup,
   removeFromGroup,
   blockUser,
-  unblockUser,
+  
 };
