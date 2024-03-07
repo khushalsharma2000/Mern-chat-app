@@ -236,7 +236,7 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
                 <ProfileModal user={getSenderFull(user, selectedChat.users)} />
               </>
             )}
-            <Button onClick={() => handleBlockUnblock(selectedChat.users[0]._id)}>
+            <Button onClick={() => handleBlockUnblock(selectedChat.users[0]._id)} color="black">
               {blockDetails[selectedChat.users[0]._id] ? "Unblock" : "Block"} {selectedChat.users[0].name}
             </Button>
           </Text>
