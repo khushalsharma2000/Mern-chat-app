@@ -181,6 +181,53 @@ const addToGroup = asyncHandler(async (req, res) => {
   }
 });
 
+const blockUser = asyncHandler(async (req, res) => {
+  const { chatId, userId } = req.body;
+
+  const updatedChat = await Chat.findByIdAndUpdate(
+    chatId,
+    {
+      $addToSet: { blockedUsers: userId }, // Add userId to blockedUsers array
+    },
+    {
+      new: true,
+    }
+  )
+    .populate("users", "-password")
+    .populate("groupAdmin", "-password");
+
+  if (!updatedChat) {
+    res.status(404);
+    throw new Error("Chat Not Found");
+  } else {
+    res.json(updatedChat);
+  }
+});
+
+// const unblockUser = asyncHandler(async (req, res) => {
+//   const { chatId, userId } = req.body;
+
+//   const updatedChat = await Chat.findByIdAndUpdate(
+//     chatId,
+//     {
+//       $pull: { blockedUsers: userId }, // Remove userId from blockedUsers array
+//     },
+//     {
+//       new: true,
+//     }
+//   )
+//     .populate("users", "-password")
+//     .populate("groupAdmin", "-password");
+
+//   if (!updatedChat) {
+//     res.status(404);
+//     throw new Error("Chat Not Found");
+//   } else {
+//     res.json(updatedChat);
+//   }
+// });
+
+
 module.exports = {
   accessChat,
   fetchChats,
@@ -188,4 +235,6 @@ module.exports = {
   renameGroup,
   addToGroup,
   removeFromGroup,
+  blockUser,
+  unblockUser,
 };

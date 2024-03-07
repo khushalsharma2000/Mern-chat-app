@@ -1,41 +1,58 @@
-import { FormControl } from "@chakra-ui/form-control";
-import { Input } from "@chakra-ui/input";
+import React, { useEffect, useState } from "react";
+import { Button } from "@chakra-ui/react";
 import { Box, Text } from "@chakra-ui/layout";
-import "./styles.css";
 import { IconButton, Spinner, useToast } from "@chakra-ui/react";
-import { getSender, getSenderFull } from "../config/ChatLogics";
-import { useEffect, useState } from "react";
-import axios from "axios";
 import { ArrowBackIcon } from "@chakra-ui/icons";
+import axios from "axios";
+import io from "socket.io-client";
 import ProfileModal from "./miscellaneous/ProfileModal";
 import ScrollableChat from "./ScrollableChat";
-import Lottie from "react-lottie";
-
-import { Button } from "@chakra-ui/react";
-import io from "socket.io-client";
 import UpdateGroupChatModal from "./miscellaneous/UpdateGroupChatModal";
 import { ChatState } from "../Context/ChatProvider";
-const ENDPOINT = "http://localhost:5000"; 
-var socket, selectedChatCompare;
+import { getSender, getSenderFull } from "../config/ChatLogics";
+import { FormControl } from "@chakra-ui/form-control";
+import Lottie from "react-lottie";
+import { Input } from "@chakra-ui/input";
+
+const ENDPOINT = "http://localhost:5000";
+let socket;
 
 const SingleChat = ({ fetchAgain, setFetchAgain }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [socketConnected, setSocketConnected] = useState(false);
-  const [typing, setTyping] = useState(false);
   const [istyping, setIsTyping] = useState(false);
+  const [blockDetails, setBlockDetails] = useState({}); // State to store block details for each user
   const toast = useToast();
+  const { selectedChat, setSelectedChat, user, notification, setNotification } = ChatState();
 
   const defaultOptions = {
     loop: true,
-    
     rendererSettings: {
       preserveAspectRatio: "xMidYMid slice",
     },
   };
-  const { selectedChat, setSelectedChat, user, notification, setNotification } =
-    ChatState();
+
+  useEffect(() => {
+    // Retrieve block/unblock status from local storage on component mount
+    const storedStatus = localStorage.getItem("blockStatus");
+    if (storedStatus) {
+      setBlockDetails(JSON.parse(storedStatus)); // Parse the stored block details from JSON
+    }
+
+    socket = io(ENDPOINT);
+    socket.emit("setup", user);
+    socket.on("connected", () => setSocketConnected(true));
+    socket.on("typing", () => setIsTyping(true));
+    socket.on("stop typing", () => setIsTyping(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Update local storage when block/unblock status changes
+    localStorage.setItem("blockStatus", JSON.stringify(blockDetails)); // Stringify block details before storing in local storage
+  }, [blockDetails]);
 
   const fetchMessages = async () => {
     if (!selectedChat) return;
@@ -48,18 +65,13 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
       };
 
       setLoading(true);
-
-      const { data } = await axios.get(
-        `/api/message/${selectedChat._id}`,
-        config
-      );
+      const { data } = await axios.get(`/api/message/${selectedChat._id}`, config);
       setMessages(data);
       setLoading(false);
-
       socket.emit("join chat", selectedChat._id);
     } catch (error) {
       toast({
-        title: "Error Occured!",
+        title: "Error Occurred!",
         description: "Failed to Load the Messages",
         status: "error",
         duration: 5000,
@@ -80,19 +92,15 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
           },
         };
         setNewMessage("");
-        const { data } = await axios.post(
-          "/api/message",
-          {
-            content: newMessage,
-            chatId: selectedChat,
-          },
-          config
-        );
+        const { data } = await axios.post("/api/message", {
+          content: newMessage,
+          chatId: selectedChat,
+        }, config);
         socket.emit("new message", data);
         setMessages([...messages, data]);
       } catch (error) {
         toast({
-          title: "Error Occured!",
+          title: "Error Occurred!",
           description: "Failed to send the Message",
           status: "error",
           duration: 5000,
@@ -103,7 +111,6 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
     }
   };
 
-
   const deleteLatestMessage = () => {
     if (messages.length > 0) {
       const updatedMessages = [...messages];
@@ -113,45 +120,34 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
   };
 
   useEffect(() => {
-    socket = io(ENDPOINT);
-    socket.emit("setup", user);
-    socket.on("connected", () => setSocketConnected(true));
-    socket.on("typing", () => setIsTyping(true));
-    socket.on("stop typing", () => setIsTyping(false));
-
-    // eslint-disable-next-line
-  }, []);
-
-  useEffect(() => {
     fetchMessages();
-
-    selectedChatCompare = selectedChat;
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChat]);
 
   useEffect(() => {
-    socket.on("message recieved", (newMessageRecieved) => {
+    socket.on("message received", (newMessageReceived) => {
       if (
-        !selectedChatCompare || // if chat is not selected or doesn't match current chat
-        selectedChatCompare._id !== newMessageRecieved.chat._id
+        !selectedChat || 
+        selectedChat._id !== newMessageReceived.chat._id
       ) {
-        if (!notification.includes(newMessageRecieved)) {
-          setNotification([newMessageRecieved, ...notification]);
+        if (!notification.includes(newMessageReceived)) {
+          setNotification([newMessageReceived, ...notification]);
           setFetchAgain(!fetchAgain);
         }
       } else {
-        setMessages([...messages, newMessageRecieved]);
+        setMessages([...messages, newMessageReceived]);
       }
     });
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const typingHandler = (e) => {
     setNewMessage(e.target.value);
 
     if (!socketConnected) return;
 
-    if (!typing) {
-      setTyping(true);
+    if (!istyping) {
+      setIsTyping(true);
       socket.emit("typing", selectedChat._id);
     }
     let lastTypingTime = new Date().getTime();
@@ -159,20 +155,59 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
     setTimeout(() => {
       var timeNow = new Date().getTime();
       var timeDiff = timeNow - lastTypingTime;
-      if (timeDiff >= timerLength && typing) {
+      if (timeDiff >= timerLength && istyping) {
         socket.emit("stop typing", selectedChat._id);
-        setTyping(false);
+        setIsTyping(false);
       }
     }, timerLength);
   };
 
+  const handleBlockUnblock = async (userId) => {
+    try {
+      const config = {
+        headers: {
+          "Content-type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+      };
+  
+      const data = {
+        chatId: selectedChat._id,
+        userId: userId,
+      };
+  
+      if (blockDetails[userId]) {
+        if (user._id === selectedChat.users[0]._id) {
+          // Only allow unblocking if the current user is the one who blocked them
+          await axios.put("/api/chat/block", data, config);
+          setBlockDetails(prevBlockDetails => ({
+            ...prevBlockDetails,
+            [userId]: false
+          }));
+        } else {
+          console.log("You don't have permission to unblock this user.");
+        }
+      } else {
+        // Block the user
+        await axios.put("/api/chat/block", data, config);
+        setBlockDetails(prevBlockDetails => ({
+          ...prevBlockDetails,
+          [userId]: true
+        }));
+      }
+    } catch (error) {
+      console.error("Error:", error.message);
+    }
+  };
+  
+  
   return (
     <>
       {selectedChat ? (
         <>
           <Text
             fontSize={{ base: "28px", md: "30px" }}
-            font color = {"white"}
+            font color={"white"}
             pb={3}
             px={2}
             w="100%"
@@ -182,28 +217,28 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
             alignItems="center"
           >
             <IconButton
-              d={{ base: "flex", md: "none"  }}
+              d={{ base: "flex", md: "none" }}
               icon={<ArrowBackIcon />}
               onClick={() => setSelectedChat("")}
             />
-            {messages &&
-              (!selectedChat.isGroupChat ? (
-                <>
-                  {getSender(user, selectedChat.users)}
-                  <ProfileModal
-                    user={getSenderFull(user, selectedChat.users)}
-                  />
-                </>
-              ) : (
-                <>
-                  {selectedChat.chatName.toUpperCase()}
-                  <UpdateGroupChatModal
-                    fetchMessages={fetchMessages}
-                    fetchAgain={fetchAgain}
-                    setFetchAgain={setFetchAgain}
-                  />
-                </>
-              ))}
+            {selectedChat.isGroupChat ? (
+              <>
+                {selectedChat.chatName.toUpperCase()}
+                <UpdateGroupChatModal
+                  fetchMessages={fetchMessages}
+                  fetchAgain={fetchAgain}
+                  setFetchAgain={setFetchAgain}
+                />
+              </>
+            ) : (
+              <>
+                {getSender(user, selectedChat.users)}
+                <ProfileModal user={getSenderFull(user, selectedChat.users)} />
+              </>
+            )}
+            <Button onClick={() => handleBlockUnblock(selectedChat.users[0]._id)}>
+              {blockDetails[selectedChat.users[0]._id] ? "Unblock" : "Block"} {selectedChat.users[0].name}
+            </Button>
           </Text>
           <Box
             d="flex"
@@ -230,17 +265,11 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
               </div>
             )}
 
-            <FormControl
-              onKeyDown={sendMessage}
-              id="first-name"
-              isRequired
-              mt={3}
-            >
+            <FormControl onKeyDown={sendMessage} id="first-name" isRequired mt={3}>
               {istyping ? (
                 <div>
                   <Lottie
                     options={defaultOptions}
-                    // height={50}
                     width={70}
                     style={{ marginBottom: 15, marginLeft: 0 }}
                   />
@@ -248,30 +277,29 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
               ) : (
                 <></>
               )}
-              <Input
-                variant="filled"
-                bg="white"
-                placeholder="Enter a message"
-                value={newMessage}
-                onChange={typingHandler}
-                
-              />
-
-<Button
-  onClick={deleteLatestMessage}
-  bg="blue"
-  color="white"
-  _hover={{ bg: "red" }}
->
-  Delete Message
-</Button>
+              {!blockDetails[selectedChat.users[0]._id] && (
+                <Input
+                  variant="filled"
+                  bg="white"
+                  placeholder="Enter a message"
+                  value={newMessage}
+                  onChange={typingHandler}
+                />
+              )}
+              <Button
+                onClick={deleteLatestMessage}
+                bg="blue"
+                color="white"
+                _hover={{ bg: "red" }}
+              >
+                Delete Message
+              </Button>
             </FormControl>
           </Box>
         </>
       ) : (
-       
         <Box d="flex" alignItems="center" justifyContent="center" h="100%">
-          <Text fontSize="3xl" pb={3} fontFamily="Work sans"  font color=" white">
+          <Text fontSize="3xl" pb={3} fontFamily="Work sans" font color=" white">
             Select from Left to chat
           </Text>
         </Box>
